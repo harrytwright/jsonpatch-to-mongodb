@@ -304,7 +304,58 @@ describe('jsonpatch to mongodb', function() {
       from: '/old_name'
     }];
 
-    chai.expect(function(){toMongodb(patches)}).to.throw('Unsupported Operation! op = copy');
+    chai.expect(function(){toMongodb(patches);}).to.throw('Unsupported Operation! op = copy');
+  });
+
+  /**
+   * Very weird use case but parseInt will only return NaN if the first non-whitespace character cannot
+   * be converted to a number, so if you're using an alphanumerical value it will assume the first digits
+   * are the number and discard the rest...
+   * */
+  it('should handle JS dictionary esq objects with alphanumerical keys', function () {
+    var patches = [{
+      op: 'add',
+      path: '/custom/1234asdb',
+      value: []
+    }];
+
+    var expected = {
+      $set: {
+        'custom.1234asdb': []
+      }
+    };
+
+    chai.expect(toMongodb(patches)).to.be.deep.eq(expected);
+  });
+
+  /**
+   * In the use case you have a key that might need a weird treatment, i.e maybe set instead of add etc.,
+   * but the main code can't fully recognise the structure of the schema you have. i.e A Map with numerical
+   * keys, these need to be treated differently to the array, but conext is needed, which is harder to do without
+   * an object to check with
+   * */
+  it('should work w/ custom keys', function () {
+    var patches = [{
+      op: 'add',
+      path: '/custom/1',
+      value: []
+    }];
+
+    var expected = {
+      $set: {
+        'custom.1': []
+      }
+    };
+
+    chai.expect(toMongodb(patches, {
+      customKeys: new Map([
+        [/custom\.[0-9]+/i, function (patch, updater) {
+          updater.$set = updater.$set || {};
+          updater.$set[toMongodb.toDot(patch.path)] = patch.value;
+          return updater;
+        }]
+      ])
+    })).to.be.deep.eq(expected);
   });
 });
 
