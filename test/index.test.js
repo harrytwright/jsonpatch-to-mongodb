@@ -348,13 +348,12 @@ describe('jsonpatch to mongodb', function() {
     };
 
     chai.expect(toMongodb(patches, {
-      customKeys: new Map([
-        [/custom\.[0-9]+/i, function (patch, updater) {
-          updater.$set = updater.$set || {};
-          updater.$set[toMongodb.toDot(patch.path)] = patch.value;
-          return updater;
-        }]
-      ])
+      updater(patch) {
+        if (/custom\.[0-9]+/i.test(toMongodb.toDot(patch.path))) {
+          this.$set = this.$set || {};
+          this.$set[toMongodb.toDot(patch.path)] = patch.value;
+        }
+      }
     })).to.be.deep.eq(expected);
   });
 });

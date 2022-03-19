@@ -1,24 +1,8 @@
-let { RE2 } = require('re2-wasm');
-
+/**
+ * TODO: Add the new 4.2 Aggregation pipeline
+ * */
 function toDot(path) {
   return path.replace(/^\//, '').replace(/\//g, '.').replace(/~1/g, '/').replace(/~0/g, '~');
-}
-
-/**
- * Deeply clone the object.
- * https://jsperf.com/deep-copy-vs-json-stringify-json-parse/25 (recursiveDeepCopy)
- * @param  {any} obj value to clone
- * @return {any} cloned obj
- */
-function _deepClone(obj) {
-  switch (typeof obj) {
-    case "object":
-      return JSON.parse(JSON.stringify(obj)); //Faster than ES5 clone - http://jsperf.com/deep-cloning-of-objects/5
-    case "undefined":
-      return null; //this is how JSON.stringify behaves for array items
-    default:
-      return obj; //no need to clone primitives
-  }
 }
 
 //3x faster than cached /^\d+$/.test(str)
@@ -37,94 +21,105 @@ function isInteger(str) {
   return true;
 }
 
-module.exports = function(patches, options) {
-  if (!options) options = {};
-  var update = {};
+function add(patch) {
+  var path = toDot(patch.path),
+    parts = path.split('.');
 
-  patches.forEach(function(p) {
-    var matched = false;
+  var positionPart = parts.length > 1 && parts[parts.length - 1];
+  var addToEnd = positionPart === '-';
+  var key = parts.slice(0, -1).join('.');
+  // see `should handle JS dictionary esq objects with alphanumerical keys`
+  var $position = (positionPart && isInteger(positionPart) && parseInt(positionPart, 10)) || null;
 
-    /**
-     * Allow for custom keys to handle any weird issues you have
-     * */
-    if ('customKeys' in options) {
-      options.customKeys.forEach(function (value, key) {
-        if (key instanceof RegExp ? new RE2(key, 'u').test(toDot(p.path)): key === toDot(p.path)) {
-          try {
-            update = value(p, _deepClone(update));
-            matched = true;
-          } catch (err) { process.emitWarning(err.message); }
-        }
-      });
-
-      if (matched) return;
+  if ($position !== null) {
+    this.$push = this.$push || {};
+    if (this.$push[key] === undefined) {
+      this.$push[key] = {
+        $each: [patch.value],
+        $position: $position
+      };
+    } else {
+      if (this.$push[key] === null || this.$push[key].$position === undefined) {
+        throw new Error("Unsupported Operation! can't use add op with mixed positions");
+      }
+      var posDiff = $position - this.$push[key].$position;
+      if (posDiff > this.$push[key].$each.length) {
+        throw new Error("Unsupported Operation! can use add op only with contiguous positions");
+      }
+      this.$push[key].$each.splice(posDiff, 0, patch.value);
+      this.$push[key].$position = Math.min($position, this.$push[key].$position);
     }
+  } else if(addToEnd) {
+    this.$push = this.$push || {};
+    if (this.$push[key] === undefined) {
+      this.$push[key] = patch.value;
+    } else {
+      if (this.$push[key] === null || this.$push[key].$each === undefined) {
+        this.$push[key] = {
+          $each: [this.$push[key]]
+        };
+      }
+      if (this.$push[key].$position !== undefined) {
+        throw new Error("Unsupported Operation! can't use add op with mixed positions");
+      }
+      this.$push[key].$each.push(patch.value);
+    }
+  } else {
+    this.$set = this.$set || {};
+    this.$set[toDot(patch.path)] = patch.value;
+  }
+}
 
-    switch(p.op) {
-      case 'add':
-        var path = toDot(p.path),
-          parts = path.split('.');
+function remove(patch) {
+  this.$unset = this.$unset || {};
+  this.$unset[toDot(patch.path)] = 1;
+}
 
-        var positionPart = parts.length > 1 && parts[parts.length - 1];
-        var addToEnd = positionPart === '-';
-        var key = parts.slice(0, -1).join('.');
-        // see `should handle JS dictionary esq objects with alphanumerical keys`
-        var $position = positionPart && isInteger(positionPart) && parseInt(positionPart, 10) || null;
+function replace(patch) {
+  this.$set = this.$set || {};
+  this.$set[toDot(patch.path)] = patch.value;
+}
 
-        if ($position !== null) {
-          update.$push = update.$push || {};
-          if (update.$push[key] === undefined) {
-            update.$push[key] = {
-              $each: [p.value],
-              $position: $position
-            };
-          } else {
-            if (update.$push[key] === null || update.$push[key].$position === undefined) {
-              throw new Error("Unsupported Operation! can't use add op with mixed positions");
-            }
-            var posDiff = $position - update.$push[key].$position;
-            if (posDiff > update.$push[key].$each.length) {
-              throw new Error("Unsupported Operation! can use add op only with contiguous positions");
-            }
-            update.$push[key].$each.splice(posDiff, 0, p.value);
-            update.$push[key].$position = Math.min($position, update.$push[key].$position);
-          }
-        } else if(addToEnd) {
-          update.$push = update.$push || {};
-          if (update.$push[key] === undefined) {
-            update.$push[key] = p.value;
-          } else {
-            if (update.$push[key] === null || update.$push[key].$each === undefined) {
-              update.$push[key] = {
-                $each: [update.$push[key]]
-              };
-            }
-            if (update.$push[key].$position !== undefined) {
-              throw new Error("Unsupported Operation! can't use add op with mixed positions");
-            }
-            update.$push[key].$each.push(p.value);
-          }
-        } else {
-          update.$set = update.$set || {};
-          update.$set[toDot(p.path)] = p.value;
-        }
-        break;
-      case 'remove':
-        update.$unset = update.$unset || {};
-        update.$unset[toDot(p.path)] = 1;
-        break;
-      case 'replace':
-        update.$set = update.$set || {};
-        update.$set[toDot(p.path)] = p.value;
-        break;
-      case 'test':
-        break;
-      default:
-        throw new Error('Unsupported Operation! op = ' + p.op);
+function createProxy(update) {
+  return new Proxy(update, {
+    set() {
+      Object.defineProperty(update, '$__dirty', { value: true });
+      return Reflect.set(...arguments);
     }
   });
+}
 
-  return update;
+module.exports = function(patches, options) {
+  if (!options) options = { updater: function () { return null; } };
+
+  return patches.reduce(function(update, patch) {
+    // Pass update as its own method
+    var fn = function (fn) { fn.call(update, patch); return update; };
+
+    if (options.updater) {
+      var proxy = createProxy(update);
+      options.updater.call(proxy, patch);
+
+      // Remove the $__dirty property since we don't want to pass that down
+      if (proxy.$__dirty) {
+        delete proxy.$__dirty;
+        return proxy;
+      }
+    }
+
+    switch(patch.op) {
+      case 'add':
+        return fn(add);
+      case 'remove':
+        return fn(remove);
+      case 'replace':
+        return fn(replace);
+      case 'test':
+        return update;
+      default:
+        throw new Error('Unsupported Operation! op = ' + patch.op);
+    }
+  }, { });
 };
 
 // Add this for the helpers
