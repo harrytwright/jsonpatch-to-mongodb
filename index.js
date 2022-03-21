@@ -88,9 +88,11 @@ function replace(patch) {
 
 function createProxy(update) {
   return new Proxy(update, {
-    set: function () {
-      Object.defineProperty(update, '$__dirty', { value: true });
-      return Reflect.set(...arguments);
+    set: function set() {
+      Object.defineProperty(update, '$__dirty', {
+        value: true
+      });
+      return Reflect.set.apply(Reflect, arguments);
     }
   });
 }
