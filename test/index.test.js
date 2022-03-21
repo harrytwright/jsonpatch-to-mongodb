@@ -348,7 +348,7 @@ describe('jsonpatch to mongodb', function() {
     };
 
     chai.expect(toMongodb(patches, {
-      updater(patch) {
+      updater: function (patch) {
         if (/custom\.[0-9]+/i.test(toMongodb.toDot(patch.path))) {
           this.$set = this.$set || {};
           this.$set[toMongodb.toDot(patch.path)] = patch.value;
