@@ -1,8 +1,6 @@
 /** Shim this for older node versions */
 if (typeof Reflect === undefined || typeof Proxy === undefined || typeof Proxy !== "function") {
-  console.error('Proxy or Reflect are not bundled, please install the optional `harmony-reflect` and `proxy-polyfill` to work');
-  require('proxy-polyfill');
-  require('harmony-reflect');
+  console.error('This version of node is not compatible with `jsonpatch-to-mongodb`');
 }
 
 /**
