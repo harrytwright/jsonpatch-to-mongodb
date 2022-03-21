@@ -103,7 +103,7 @@ module.exports = function(patches, options) {
       // Remove the $__dirty property since we don't want to pass that down
       if (proxy.$__dirty) {
         delete proxy.$__dirty;
-        return proxy;
+        return update;
       }
     }
 
