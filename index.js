@@ -1,6 +1,7 @@
 /** Shim this for older node versions */
-if (typeof Proxy === 'undefined' || typeof Reflect === 'undefined') {
-  console.error('Proxy or Reflect are not bundled, please install the optional `harmony-reflect` to work');
+if (typeof Reflect === undefined || typeof Proxy === undefined || typeof Proxy !== "function") {
+  console.error('Proxy or Reflect are not bundled, please install the optional `harmony-reflect` and `proxy-polyfill` to work');
+  require('proxy-polyfill');
   require('harmony-reflect');
 }
 
