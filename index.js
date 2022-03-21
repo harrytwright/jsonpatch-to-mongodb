@@ -1,3 +1,9 @@
+/** Shim this for older node versions */
+if (typeof Proxy === 'undefined' || typeof Reflect === 'undefined') {
+  process.emitWarning('Proxy or Reflect are not bundled, please install the optional `harmony-reflect` to work');
+  require('harmony-reflect');
+}
+
 /**
  * TODO: Add the new 4.2 Aggregation pipeline
  * */
@@ -82,7 +88,7 @@ function replace(patch) {
 
 function createProxy(update) {
   return new Proxy(update, {
-    set() {
+    set: function () {
       Object.defineProperty(update, '$__dirty', { value: true });
       return Reflect.set(...arguments);
     }
