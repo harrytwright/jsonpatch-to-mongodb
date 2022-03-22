@@ -356,5 +356,37 @@ describe('jsonpatch to mongodb', function() {
       }
     })).to.be.deep.eq(expected);
   });
+
+  /**
+   * This is a check for an issue where the updater is passed down with the $__dirty
+   * value even if it's been deleted, causing any normal operators to not be handled
+   * */
+  it('should work with complex changes and custom keys', function () {
+    var patches = [{
+      op: 'add',
+      path: '/custom/1',
+      value: []
+    }, {
+      op: 'replace',
+      path: '/type',
+      value: 'custom'
+    }];
+
+    var expected = {
+      $set: {
+        'custom.1': [],
+        'type': 'custom'
+      },
+    };
+
+    chai.expect(toMongodb(patches, {
+      updater: function (patch) {
+        if (/custom\.[0-9]+/i.test(toMongodb.toDot(patch.path))) {
+          this.$set = this.$set || {};
+          this.$set[toMongodb.toDot(patch.path)] = patch.value;
+        }
+      }
+    })).to.be.deep.eq(expected);
+  });
 });
 

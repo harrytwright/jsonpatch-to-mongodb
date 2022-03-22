@@ -26,6 +26,23 @@ function isInteger(str) {
   return true;
 }
 
+/**
+ * Deeply clone the object.
+ * https://jsperf.com/deep-copy-vs-json-stringify-json-parse/25 (recursiveDeepCopy)
+ * @param  {any} obj value to clone
+ * @return {any} cloned obj
+ */
+function _deepClone(obj) {
+  switch (typeof obj) {
+    case "object":
+      return JSON.parse(JSON.stringify(obj)); //Faster than ES5 clone - http://jsperf.com/deep-cloning-of-objects/5
+    case "undefined":
+      return null; //this is how JSON.stringify behaves for array items
+    default:
+      return obj; //no need to clone primitives
+  }
+}
+
 function add(patch) {
   var path = toDot(patch.path),
     parts = path.split('.');
@@ -109,8 +126,8 @@ module.exports = function(patches, options) {
 
       // Remove the $__dirty property since we don't want to pass that down
       if (proxy.$__dirty) {
-        delete proxy.$__dirty;
-        return update;
+        delete update.$__dirty;
+        return _deepClone(update);
       }
     }
 
